@@ -8,10 +8,21 @@
 	<body>
 		<div class="container">
 			<header>
-				<h1>Electron boilerplate</h1>
+				<h1>WS2812b Ctrl</h1>
 			</header>
-			<section class="main"></section>
-			<footer></footer>
+			<section class="main">
+				<div>
+					<button id="scan" type="button" onclick="scanPorts();">Scan Ports</button>
+					<select id="serialSelect"></select>
+					<button id="connect" type="button" disabled onclick="connectSerial()">Connect</button>
+				</div>
+				<div>
+					<input id="data64" type="text" value="">
+				</div>
+			</section>
+			<footer>
+				<script src="index.js"></script>
+			</footer>
 		</div>
 	</body>
 </html>

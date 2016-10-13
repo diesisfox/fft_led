@@ -1,0 +1,26 @@
+{
+    "extends": "standard",
+    "installedESLint": true,
+    "plugins": [
+        "standard",
+        "promise"
+    ],
+	"env": {
+      "es6": true,
+      "node": true,
+	  "browser": true
+    },
+	"rules": {
+		"semi": [2, "always"],
+		"no-unused-vars": [1, { "vars": "all", "args": "none" }],
+		"no-tabs": 0,
+		"indent": 0,
+		"keyword-spacing": 0,
+		"space-before-blocks": 0,
+		"space-before-function-paren": 0,
+		"no-trailing-spaces": 1,
+		"quotes": 1,
+		"spaced-comment": 0,
+		"no-multiple-empty-lines": 1
+	}
+}
