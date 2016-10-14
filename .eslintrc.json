@@ -21,6 +21,7 @@
 		"no-trailing-spaces": 1,
 		"quotes": 1,
 		"spaced-comment": 0,
-		"no-multiple-empty-lines": 1
+		"no-multiple-empty-lines": 1,
+		"eqeqeq": 0
 	}
 }

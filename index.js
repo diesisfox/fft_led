@@ -1,9 +1,11 @@
 const SerialPort = require('serialport');
 
-var comPorts, serial;
+var comPorts, serial, inputDeviceInfos;
+var audioStream, audioCtx, analyser, source;
 
-document.onload = () => {
+window.onload = () => {
 	scanPorts();
+	scanAudioInputs();
 };
 
 function scanPorts(){
@@ -32,7 +34,6 @@ function updatePortsSelect(list){ //takes an array of comNames
 	for(var item of list){
 		inner += '<option value="' + item + '">' + item + '</option>\n';
 	}
-	console.log(inner);
 	document.getElementById('serialSelect').innerHTML = inner;
 	if(list.length){
 		document.getElementById('connect').disabled = false;
@@ -89,4 +90,66 @@ function setupSerial(){
 
 function disconnectSerial(){
 	serial.close();
+}
+
+function scanAudioInputs(){
+	inputDeviceInfos = [];
+	document.getElementById('useAudio').disabled = true;
+	document.getElementById('useAudio').innerHTML = 'Use';
+	document.getElementById('scanAudio').disabled = false;
+	document.getElementById('audioSelect').disabled = false;
+	navigator.mediaDevices.enumerateDevices().then((devices) => {
+		for(var device of devices){
+			if(device.kind == 'audioinput'){
+				console.log(device.label);
+				inputDeviceInfos.push(device);
+			}
+		}
+		updateAudioSelect(inputDeviceInfos);
+	});
+}
+
+function updateAudioSelect(list){ //takes an array of comNames
+	let inner = '';
+	for(var item of list){
+		inner += '<option value="' + item.deviceId + '">' + item.label + '</option>\n';
+	}
+	console.log(inner);
+	document.getElementById('audioSelect').innerHTML = inner;
+	if(list.length){
+		document.getElementById('useAudio').disabled = false;
+	}
+}
+
+function connectAudio(){
+	if(audioCtx){
+		disconnectAudio();
+		return;
+	}
+	let s = document.getElementById('audioSelect');
+	let constraints = {
+		audio: {deviceId: {exact: s.options[s.selectedIndex].value}}
+	};
+	navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+		audioStream = stream;
+	}).catch((reason) => {
+		console.log('navigator.getUserMedia error: ', reason);
+	});
+	setupAudio();
+	s.disabled = true;
+	document.getElementById('useAudio').innerHTML = 'Unuse';
+	document.getElementById('scanAudio').disabled = true;
+}
+
+function setupAudio(){
+	audioCtx = new window.AudioContext();
+	analyser = audioCtx.createAnalyser();
+	source = audioCtx.createMediaStreamSource(audioStream);
+	source.connect(analyser);
+	analyser.fftSize = 2048;
+}
+
+function disconnectAudio(){
+	audioCtx = null; //needs more nullification
+	scanAudioInputs();
 }

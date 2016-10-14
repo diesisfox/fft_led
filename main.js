@@ -17,8 +17,8 @@ function onClosed() {
 
 function createMainWindow() {
 	const win = new electron.BrowserWindow({
-		width: 1000,
-		height: 700
+		width: 1280,
+		height: 770
 	});
 
 	win.loadURL(`file://${__dirname}/index.html`);
