@@ -22,6 +22,7 @@
 		"quotes": 1,
 		"spaced-comment": 0,
 		"no-multiple-empty-lines": 1,
-		"eqeqeq": 0
+		"eqeqeq": 0,
+		"space-infix-ops": 0
 	}
 }

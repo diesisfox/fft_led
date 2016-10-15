@@ -1,7 +1,8 @@
 const SerialPort = require('serialport');
 
-var comPorts, serial, inputDeviceInfos;
-var audioStream, audioCtx, analyser, source;
+var comPorts, serial, inputDeviceInfos; //serial stuff
+var audioStream, audioCtx, analyser, source; //audio stuff
+var sCanvas, wCanvas, sAnimation, wAnimation, sCtx, wCtx; //animation stuff
 
 window.onload = () => {
 	scanPorts();
@@ -132,13 +133,13 @@ function connectAudio(){
 	};
 	navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
 		audioStream = stream;
+		setupAudio();
+		s.disabled = true;
+		document.getElementById('useAudio').innerHTML = 'Unuse';
+		document.getElementById('scanAudio').disabled = true;
 	}).catch((reason) => {
 		console.log('navigator.getUserMedia error: ', reason);
 	});
-	setupAudio();
-	s.disabled = true;
-	document.getElementById('useAudio').innerHTML = 'Unuse';
-	document.getElementById('scanAudio').disabled = true;
 }
 
 function setupAudio(){
@@ -146,10 +147,83 @@ function setupAudio(){
 	analyser = audioCtx.createAnalyser();
 	source = audioCtx.createMediaStreamSource(audioStream);
 	source.connect(analyser);
-	analyser.fftSize = 2048;
+	analyser.fftSize = 8192;
+	analyser.smoothingTimeConstant = 0;
+	visualizeWaveform();
+	visualizeSpectrum();
+
+	audioCtx.onstatechange = () => {
+		if(audioCtx.state == 'closed') audioCtx = null;
+	};
 }
 
 function disconnectAudio(){
-	audioCtx = null; //needs more nullification
+	window.cancelAnimationFrame(sAnimation);
+	window.cancelAnimationFrame(wAnimation);
+	audioCtx.close();
 	scanAudioInputs();
+}
+
+function visualizeSpectrum(){
+	sCanvas = document.getElementById('spectrum');
+	sCtx = sCanvas.getContext('2d');
+	let w = sCanvas.width;
+	let h = sCanvas.height;
+	let bufferLength = analyser.frequencyBinCount;
+	let dataArray = new Uint8Array(bufferLength);
+	sCtx.clearRect(0, 0, w, h);
+
+	function draw(){
+		sAnimation = window.requestAnimationFrame(draw);
+		analyser.getByteFrequencyData(dataArray);
+
+		sCtx.fillStyle = '#ccc';
+		sCtx.fillRect(0, 0, w, h);
+
+		sCtx.fillStyle = '#000';
+		let sliceWidth = w*1.00/bufferLength;
+		for(let i = 0; i < bufferLength; i++){
+			sCtx.fillRect(i*sliceWidth, h, (i+1)*sliceWidth, -h*dataArray[i]/255.00);
+		}
+	}
+
+	draw();
+}
+
+function visualizeWaveform(){
+	wCanvas = document.getElementById('waveform');
+	wCtx = wCanvas.getContext('2d');
+	let w = wCanvas.width;
+	let h = wCanvas.height;
+	let bufferLength = analyser.frequencyBinCount;
+	let dataArray = new Uint8Array(bufferLength);
+	wCtx.clearRect(0, 0, w, h);
+
+	function draw(){
+		wAnimation = window.requestAnimationFrame(draw);
+		analyser.getByteTimeDomainData(dataArray);
+
+		wCtx.fillStyle = '#ccc';
+		wCtx.fillRect(0, 0, w, h);
+
+		wCtx.lineWidth = 2;
+		wCtx.strokeStyle = '#000';
+		wCtx.beginPath();
+		let sliceWidth = w * 1.00 / bufferLength;
+		let x = 0;
+		for(var i = 0; i < bufferLength; i++) {
+			var v = dataArray[i] / 128.0;
+			var y = v * h/2;
+			if(i == 0) {
+				wCtx.moveTo(x, y);
+			} else {
+				wCtx.lineTo(x, y);
+			}
+			x += sliceWidth;
+		}
+		wCtx.lineTo(wCanvas.width, wCanvas.height/2);
+		wCtx.stroke();
+	}
+
+	draw();
 }
