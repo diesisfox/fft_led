@@ -25,3 +25,18 @@ div {
 	margin: auto;
 	text-align: center;
 }
+
+.viz_sm{
+	margin-right: 40px;
+	width: 380px;
+	height: 300px;
+}
+
+.viz_sm:last-child{
+	margin-right: 0px;
+}
+
+.viz_lg{
+	width: 1228px;
+	height: 300px;
+}

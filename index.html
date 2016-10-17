@@ -12,20 +12,22 @@
 			</header>
 			<section class="main">
 				<div>
-					<button id="scan" type="button" onclick="scanPorts();">Scan Ports</button>
+					<button id="scan" type="button">Scan Ports</button>
 					<select id="serialSelect"></select>
-					<button id="connect" type="button" disabled onclick="connectSerial();">Connect</button>
+					<button id="connect" type="button" disabled>Connect</button>
 				</div>
 				<div>
-					<button id="scanAudio" type="button" onclick="scanAudioInputs();">Scan Audio Inputs</button>
+					<button id="scanAudio" type="button">Scan Audio Inputs</button>
 					<select id="audioSelect"></select>
-					<button id="useAudio" type="button" disabled onclick="connectAudio();">Use</button>
+					<button id="useAudio" type="button" disabled>Use</button>
 				</div>
 				<div>
-					<canvas id="waveform" width="1024" height="300"></canvas>
+					<canvas id="waveform" class="viz_lg" width="1228px" height="300px"></canvas>
 				</div>
 				<div>
-					<canvas id="spectrum" width="1024" height="300"></canvas>
+					<canvas id="spectrum" class="viz_sm" width="380px" height="300px"></canvas>
+					<canvas id="log" class="viz_sm" width="380px" height="300px"></canvas>
+					<canvas id="pixel" class="viz_sm" width="380px" height="300px"></canvas>
 				</div>
 			</section>
 			<footer>

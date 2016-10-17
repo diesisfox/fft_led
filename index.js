@@ -2,12 +2,20 @@ const SerialPort = require('serialport');
 
 var comPorts, serial, inputDeviceInfos; //serial stuff
 var audioStream, audioCtx, analyser, source; //audio stuff
-var sCanvas, wCanvas, sAnimation, wAnimation, sCtx, wCtx; //animation stuff
+var sAnimation, wAnimation, lAnimation, pAnimation; //animation stuff
 
 window.onload = () => {
 	scanPorts();
 	scanAudioInputs();
+	attachElements();
 };
+
+function attachElements(){
+	document.getElementById('scan').onclick = scanPorts;
+	document.getElementById('connect').onclick = connectSerial;
+	document.getElementById('scanAudio').onclick = scanAudioInputs;
+	document.getElementById('useAudio').onclick = connectAudio;
+}
 
 function scanPorts(){
 	document.getElementById('connect').disabled = true;
@@ -147,11 +155,11 @@ function setupAudio(){
 	analyser = audioCtx.createAnalyser();
 	source = audioCtx.createMediaStreamSource(audioStream);
 	source.connect(analyser);
-	analyser.fftSize = 8192;
-	analyser.smoothingTimeConstant = 0;
-	visualizeWaveform();
-	visualizeSpectrum();
-
+	analyser.fftSize = 2048;
+	analyser.smoothingTimeConstant = 0.2;
+	analyser.minDecibels = -80;
+	analyser.maxDecibels = -10;
+	startVisualizations();
 	audioCtx.onstatechange = () => {
 		if(audioCtx.state == 'closed') audioCtx = null;
 	};
@@ -160,30 +168,50 @@ function setupAudio(){
 function disconnectAudio(){
 	window.cancelAnimationFrame(sAnimation);
 	window.cancelAnimationFrame(wAnimation);
-	audioCtx.close();
+	window.cancelAnimationFrame(lAnimation);
+	window.cancelAnimationFrame(pAnimation);
+	if (audioStream) {
+		audioStream.getTracks().forEach(function(track) {
+			track.stop();
+		});
+	}
 	scanAudioInputs();
 }
 
+function startVisualizations(){
+	visualizeWaveform();
+	visualizeSpectrum();
+	visualizeLog(2, 4);
+	visualizePixel(200, 2000, 1.25);
+}
+
 function visualizeSpectrum(){
-	sCanvas = document.getElementById('spectrum');
-	sCtx = sCanvas.getContext('2d');
-	let w = sCanvas.width;
-	let h = sCanvas.height;
+	let canvas = document.getElementById('spectrum');
+	let ctx = canvas.getContext('2d');
+	let w = canvas.width;
+	let h = canvas.height;
 	let bufferLength = analyser.frequencyBinCount;
 	let dataArray = new Uint8Array(bufferLength);
-	sCtx.clearRect(0, 0, w, h);
+	ctx.clearRect(0, 0, w, h);
 
 	function draw(){
 		sAnimation = window.requestAnimationFrame(draw);
 		analyser.getByteFrequencyData(dataArray);
 
-		sCtx.fillStyle = '#ccc';
-		sCtx.fillRect(0, 0, w, h);
+		ctx.fillStyle = '#ccc';
+		ctx.fillRect(0, 0, w, h);
 
-		sCtx.fillStyle = '#000';
+		ctx.fillStyle = '#f35';
+		let scale = w/bufferLength;
+		ctx.fillRect(10/22050*bufferLength*scale, 0, 1, h);
+		ctx.fillRect(100/22050*bufferLength*scale, 0, 1, h);
+		ctx.fillRect(1000/22050*bufferLength*scale, 0, 1, h);
+		ctx.fillRect(10000/22050*bufferLength*scale, 0, 1, h);
+
+		ctx.fillStyle = '#000';
 		let sliceWidth = w*1.00/bufferLength;
 		for(let i = 0; i < bufferLength; i++){
-			sCtx.fillRect(i*sliceWidth, h, (i+1)*sliceWidth, -h*dataArray[i]/255.00);
+			ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*dataArray[i]/255.00);
 		}
 	}
 
@@ -191,39 +219,252 @@ function visualizeSpectrum(){
 }
 
 function visualizeWaveform(){
-	wCanvas = document.getElementById('waveform');
-	wCtx = wCanvas.getContext('2d');
-	let w = wCanvas.width;
-	let h = wCanvas.height;
+	let canvas = document.getElementById('waveform');
+	let ctx = canvas.getContext('2d');
+	let w = canvas.width;
+	let h = canvas.height;
 	let bufferLength = analyser.frequencyBinCount;
 	let dataArray = new Uint8Array(bufferLength);
-	wCtx.clearRect(0, 0, w, h);
+	ctx.clearRect(0, 0, w, h);
 
 	function draw(){
 		wAnimation = window.requestAnimationFrame(draw);
 		analyser.getByteTimeDomainData(dataArray);
 
-		wCtx.fillStyle = '#ccc';
-		wCtx.fillRect(0, 0, w, h);
+		ctx.fillStyle = '#ccc';
+		ctx.fillRect(0, 0, w, h);
 
-		wCtx.lineWidth = 2;
-		wCtx.strokeStyle = '#000';
-		wCtx.beginPath();
+		ctx.lineWidth = 2;
+		ctx.strokeStyle = '#000';
+		ctx.beginPath();
 		let sliceWidth = w * 1.00 / bufferLength;
 		let x = 0;
 		for(var i = 0; i < bufferLength; i++) {
 			var v = dataArray[i] / 128.0;
 			var y = v * h/2;
 			if(i == 0) {
-				wCtx.moveTo(x, y);
+				ctx.moveTo(x, y);
 			} else {
-				wCtx.lineTo(x, y);
+				ctx.lineTo(x, y);
 			}
 			x += sliceWidth;
 		}
-		wCtx.lineTo(wCanvas.width, wCanvas.height/2);
-		wCtx.stroke();
+		ctx.lineTo(canvas.width, canvas.height/2);
+		ctx.stroke();
 	}
 
 	draw();
+}
+
+function visualizeLog(pwrx, pwry){
+	let canvas = document.getElementById('log');
+	let ctx = canvas.getContext('2d');
+	let w = canvas.width;
+	let h = canvas.height;
+	let bufferLength = analyser.frequencyBinCount;
+	let dataArray = new Uint8Array(bufferLength);
+	ctx.clearRect(0, 0, w, h);
+
+	function draw(){
+		lAnimation = window.requestAnimationFrame(draw);
+		analyser.getByteFrequencyData(dataArray);
+		dataArray = normalizeLog(dataArray, pwrx, pwry);
+
+		ctx.fillStyle = '#ccc';
+		ctx.fillRect(0, 0, w, h);
+
+		ctx.fillStyle = '#f35';
+		let scale = w/bufferLength;
+		let logscale = 1/bufferLength;
+		ctx.fillRect(Math.pow(10/22050, 1/pwrx)*w, 0, 1, h);
+		ctx.fillRect(Math.pow(100/22050, 1/pwrx)*w, 0, 1, h);
+		ctx.fillRect(Math.pow(1000/22050, 1/pwrx)*w, 0, 1, h);
+		ctx.fillRect(Math.pow(10000/22050, 1/pwrx)*w, 0, 1, h);
+
+		ctx.fillStyle = '#000';
+		let sliceWidth = w*1.00/bufferLength;
+		for(let i = 0; i < bufferLength; i++){
+			ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*dataArray[i]/255.00);
+		}
+	}
+
+	draw();
+}
+
+function visualizePixel(cut1, cut2, overlap, leds = 0){
+	let canvas = document.getElementById('pixel');
+	let ctx = canvas.getContext('2d');
+	let w = canvas.width;
+	let h = canvas.height;
+	let bufferLength = analyser.frequencyBinCount;
+	let dataArray = new Uint8Array(bufferLength);
+	let nyquist = audioCtx.sampleRate / 2;
+	cut1 = Math.ceil(cut1*bufferLength/nyquist); //convert hz to bin#
+	cut2 = Math.ceil(cut2*bufferLength/nyquist); //convert hz to bin#
+	let arrR, arrG, arrB;
+	if(leds){
+		arrR = new Uint8ClampedArray(leds);
+		arrG = new Uint8ClampedArray(leds);
+		arrB = new Uint8ClampedArray(leds);
+	}else{
+		arrR = new Uint8ClampedArray(w);
+		arrG = new Uint8ClampedArray(w);
+		arrB = new Uint8ClampedArray(w);
+	}
+	ctx.clearRect(0, 0, w, h);
+
+	function draw(){
+		pAnimation = window.requestAnimationFrame(draw);
+		analyser.getByteFrequencyData(dataArray);
+		spreadGaussian(arrR, dataArray.slice(0, cut1-1), overlap);
+		spreadGaussian(arrG, dataArray.slice(cut1, cut2-1), overlap);
+		spreadGaussian(arrB, dataArray.slice(cut2, bufferLength), overlap);
+		ctx.globalCompositeOperation = 'source-over';
+		ctx.fillStyle = '#000';
+		ctx.fillRect(0, 0, w, h);
+
+		ctx.globalCompositeOperation = 'lighten';
+		if(leds){
+			ctx.fillStyle = '#c00';
+			let sliceWidth = w*1.00/arrR.length;
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#f00';
+			ctx.beginPath();
+			let x = 0;
+			let lasty = 0;
+			for(let i = 0; i < arrR.length; i++){
+				let y = h - arrR[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(x, y);
+				} else {
+					ctx.lineTo(x, lasty);
+					ctx.lineTo(x, y);
+				}
+				lasty = y;
+				x += sliceWidth;
+				ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*arrR[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#0c0';
+			sliceWidth = w*1.00/arrG.length;
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#0f0';
+			ctx.beginPath();
+			x = 0;
+			lasty = 0;
+			for(let i = 0; i < arrG.length; i++){
+				let y = h - arrG[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(x, y);
+				} else {
+					ctx.lineTo(x, lasty);
+					ctx.lineTo(x, y);
+				}
+				lasty = y;
+				x += sliceWidth;
+				ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*arrG[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#00c';
+			sliceWidth = w*1.00/arrB.length;
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#00f';
+			ctx.beginPath();
+			x = 0;
+			lasty = 0;
+			for(let i = 0; i < arrB.length; i++){
+				let y = h - arrB[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(x, y);
+				} else {
+					ctx.lineTo(x, lasty);
+					ctx.lineTo(x, y);
+				}
+				lasty = y;
+				x += sliceWidth;
+				ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*arrB[i]/255.00);
+			}
+			ctx.stroke();
+		}else{
+			ctx.fillStyle = '#c00';
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#f00';
+			for(let i = 0; i < arrR.length; i++){
+				let y = h - arrR[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(i, y);
+					ctx.beginPath();
+				} else {
+					ctx.lineTo(i, y);
+				}
+				ctx.fillRect(i, h, 1, -h*arrR[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#0c0';
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#0f0';
+			for(let i = 0; i < arrG.length; i++){
+				let y = h - arrG[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(i, y);
+					ctx.beginPath();
+				} else {
+					ctx.lineTo(i, y);
+				}
+				ctx.fillRect(i, h, 1, -h*arrG[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#00c';
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#00f';
+			for(let i = 0; i < arrB.length; i++){
+				let y = h - arrB[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(i, y);
+					ctx.beginPath();
+				} else {
+					ctx.lineTo(i, y);
+				}
+				ctx.fillRect(i, h, 1, -h*arrB[i]/255.00);
+			}
+			ctx.stroke();
+		}
+	}
+
+	draw();
+}
+
+function normalizeLog(array, xpow, ypow){
+	let length = array.length - 1;
+	let xscale = length/Math.pow(length, xpow);
+	let yscale = 255/Math.pow(255, ypow);
+	let result = new Uint8Array(length+1);
+	for(let i = 0; i < result.length; i++){
+		result[i] = Math.pow((array[Math.round(Math.pow(i, xpow)*xscale)]), ypow)*yscale;
+	}
+	return result;
+}
+
+function spreadGaussian(target, input, crossover = 1){
+	let inputLength = input.length;
+	let targetLength = target.length;
+	let spaceBetween = targetLength/(inputLength-1);
+	let inputLocations = [];
+	for(let i=0; i<inputLength; i++){
+		inputLocations.push(i*spaceBetween); //not entirely accurate
+	}
+	let tworoot2ln2 = 2*Math.sqrt(2*Math.LN2);
+	let constC = crossover*spaceBetween/tworoot2ln2;
+	let twoc2 = 2*Math.pow(constC, 2);
+	for(let i=0; i<targetLength; i++){
+		let magnitude = 0;
+		for(let j=0; j<inputLength; j++){
+			magnitude += input[j]*Math.exp(0- Math.pow(i-inputLocations[j], 2)/twoc2);
+		}
+		target[i]=(magnitude);
+	}
 }
