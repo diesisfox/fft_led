@@ -1,4 +1,6 @@
 const SerialPort = require('serialport');
+//const Spline = require('cubic-spline'); //nah
+const Interpolator = require('spline-interpolator');
 
 var comPorts, serial, inputDeviceInfos; //serial stuff
 var audioStream, audioCtx, analyser, source; //audio stuff
@@ -158,7 +160,7 @@ function setupAudio(){
 	analyser.fftSize = 2048;
 	analyser.smoothingTimeConstant = 0.2;
 	analyser.minDecibels = -80;
-	analyser.maxDecibels = -10;
+	analyser.maxDecibels = -0;
 	startVisualizations();
 	audioCtx.onstatechange = () => {
 		if(audioCtx.state == 'closed') audioCtx = null;
@@ -179,14 +181,13 @@ function disconnectAudio(){
 }
 
 function startVisualizations(){
-	visualizeWaveform();
-	visualizeSpectrum();
-	visualizeLog(2, 4);
-	visualizePixel(200, 2000, 1.25);
+	visualizeWaveform(document.getElementById('waveform'));
+	visualizeSpectrum(document.getElementById('spectrum'));
+	visualizeLog(document.getElementById('log'), 2, 4);
+	visualizeCSplineRGB(document.getElementById('pixel'), 0, 300, 3000, 22000, 64, true, 2);
 }
 
-function visualizeSpectrum(){
-	let canvas = document.getElementById('spectrum');
+function visualizeSpectrum(canvas){
 	let ctx = canvas.getContext('2d');
 	let w = canvas.width;
 	let h = canvas.height;
@@ -218,8 +219,7 @@ function visualizeSpectrum(){
 	draw();
 }
 
-function visualizeWaveform(){
-	let canvas = document.getElementById('waveform');
+function visualizeWaveform(canvas){
 	let ctx = canvas.getContext('2d');
 	let w = canvas.width;
 	let h = canvas.height;
@@ -256,8 +256,7 @@ function visualizeWaveform(){
 	draw();
 }
 
-function visualizeLog(pwrx, pwry){
-	let canvas = document.getElementById('log');
+function visualizeLog(canvas, pwrx, pwry){
 	let ctx = canvas.getContext('2d');
 	let w = canvas.width;
 	let h = canvas.height;
@@ -291,8 +290,156 @@ function visualizeLog(pwrx, pwry){
 	draw();
 }
 
-function visualizePixel(cut1, cut2, overlap, leds = 0){
-	let canvas = document.getElementById('pixel');
+function visualizeCSplineRGB(canvas, cutL, cut1, cut2, cutH, leds = 0, log = false, pwr = 2){
+	let ctx = canvas.getContext('2d');
+	let w = canvas.width;
+	let h = canvas.height;
+	let bufferLength = analyser.frequencyBinCount;
+	let dataArray = new Uint8Array(bufferLength);
+	let nyquist = audioCtx.sampleRate / 2;
+	if(cutH>22000)cutH=22000;
+	cutL = Math.ceil(cutL*bufferLength/nyquist);
+	cutH = Math.ceil(cutH*bufferLength/nyquist);
+	cut1 = Math.ceil(cut1*bufferLength/nyquist); //convert hz to bin#
+	cut2 = Math.ceil(cut2*bufferLength/nyquist); //convert hz to bin#
+	let arrR, arrG, arrB;
+	if(leds){
+		arrR = new Uint8ClampedArray(leds);
+		arrG = new Uint8ClampedArray(leds);
+		arrB = new Uint8ClampedArray(leds);
+	}else{
+		arrR = new Uint8ClampedArray(w);
+		arrG = new Uint8ClampedArray(w);
+		arrB = new Uint8ClampedArray(w);
+	}
+	ctx.clearRect(0, 0, w, h);
+
+	function draw(){
+		pAnimation = window.requestAnimationFrame(draw);
+		analyser.getByteFrequencyData(dataArray);
+		cSplineInterpolate(arrR, dataArray.slice(cutL, cut1-1), log, pwr);
+		cSplineInterpolate(arrG, dataArray.slice(cut1, cut2-1), log, pwr);
+		cSplineInterpolate(arrB, dataArray.slice(cut2, cutH-1), log, pwr);
+		ctx.globalCompositeOperation = 'source-over';
+		ctx.fillStyle = '#000';
+		ctx.fillRect(0, 0, w, h);
+
+		ctx.globalCompositeOperation = 'lighten';
+		if(leds){
+			ctx.fillStyle = '#c00';
+			let sliceWidth = w*1.00/arrR.length;
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#f00';
+			ctx.beginPath();
+			let x = 0;
+			let lasty = 0;
+			for(let i = 0; i < arrR.length; i++){
+				let y = h - arrR[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(x, y);
+				} else {
+					//ctx.lineTo(x, lasty);
+					//ctx.lineTo(x, y);
+				}
+				lasty = y;
+				x += sliceWidth;
+				ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*arrR[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#0c0';
+			sliceWidth = w*1.00/arrG.length;
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#0f0';
+			ctx.beginPath();
+			x = 0;
+			lasty = 0;
+			for(let i = 0; i < arrG.length; i++){
+				let y = h - arrG[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(x, y);
+				} else {
+					//ctx.lineTo(x, lasty);
+					//ctx.lineTo(x, y);
+				}
+				lasty = y;
+				x += sliceWidth;
+				ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*arrG[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#00c';
+			sliceWidth = w*1.00/arrB.length;
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#00f';
+			ctx.beginPath();
+			x = 0;
+			lasty = 0;
+			for(let i = 0; i < arrB.length; i++){
+				let y = h - arrB[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(x, y);
+				} else {
+					//ctx.lineTo(x, lasty);
+					//ctx.lineTo(x, y);
+				}
+				lasty = y;
+				x += sliceWidth;
+				ctx.fillRect(i*sliceWidth, h, sliceWidth, -h*arrB[i]/255.00);
+			}
+			ctx.stroke();
+		}else{
+			ctx.fillStyle = '#c00';
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#f00';
+			for(let i = 0; i < arrR.length; i++){
+				let y = h - arrR[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(i, y);
+					ctx.beginPath();
+				} else {
+					ctx.lineTo(i, y);
+				}
+				ctx.fillRect(i, h, 1, -h*arrR[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#0c0';
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#0f0';
+			for(let i = 0; i < arrG.length; i++){
+				let y = h - arrG[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(i, y);
+					ctx.beginPath();
+				} else {
+					ctx.lineTo(i, y);
+				}
+				ctx.fillRect(i, h, 1, -h*arrG[i]/255.00);
+			}
+			ctx.stroke();
+
+			ctx.fillStyle = '#00c';
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#00f';
+			for(let i = 0; i < arrB.length; i++){
+				let y = h - arrB[i]/255*h;
+				if(i == 0) {
+					ctx.moveTo(i, y);
+					ctx.beginPath();
+				} else {
+					ctx.lineTo(i, y);
+				}
+				ctx.fillRect(i, h, 1, -h*arrB[i]/255.00);
+			}
+			ctx.stroke();
+		}
+	}
+
+	draw();
+}
+
+function visualizeGaussianRGB(canvas, cut1, cut2, overlap, leds = 0){
 	let ctx = canvas.getContext('2d');
 	let w = canvas.width;
 	let h = canvas.height;
@@ -436,6 +583,27 @@ function visualizePixel(cut1, cut2, overlap, leds = 0){
 	}
 
 	draw();
+}
+
+function cSplineInterpolate(target, input, log = false, pwr = 2){
+	let inputLength = input.length;
+	let targetLength = target.length;
+	let inputLocations = [];
+	let targetLocations = [];
+	let spaceBetween = (inputLength-1)/(targetLength-1);
+	let scale = (inputLength-1) / Math.pow((inputLength-1), pwr);
+	for(let i=0; i<inputLength; i++) inputLocations.push(i);
+	const curve = new Interpolator(inputLocations, input);
+	for(let i=0; i<targetLength; i++) targetLocations.push(i*spaceBetween);
+	if(log){
+		for(let i=0; i<targetLength; i++){
+			target[i] = curve.interpolate(Math.pow(targetLocations[i], pwr)*scale);
+		}
+	}else{
+		for(let i=0; i<targetLength; i++){
+			target[i] = curve.interpolate(targetLocations[i]);
+		}
+	}
 }
 
 function normalizeLog(array, xpow, ypow){
